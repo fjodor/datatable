@@ -18,6 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(knitr)
 library(tidyverse)
+library(dtplyr)
 library(bikeshare14)
 library(bench)
 library(lobstr)
@@ -28,6 +29,8 @@ library(lobstr)
 
 * bench für Zeitmessungen: empfehlenswert gegenüber microbenchmark, u. a. weil es automatisch Ergebnisse vergleicht
 * bikeshare14 für den Datensatz: batrips
+* tidyverse inkl. dplyr
+* dtplyr: "Data Table Back-End für 'dplyr'
 
 # Testdatensatz: batrips - Fahrradwege
 
@@ -40,24 +43,95 @@ Es handelt sich um `r nrow(batrips)` Zeilen und `r ncol(batrips)` Spalten (Varia
 # Der Trick mit utils:::format.object_size() ist ein Hack (Funktion ist NICHT exportiert) und stammt von hier:
 # https://stackoverflow.com/questions/29787452/how-do-i-quickly-convert-the-size-element-of-file-info-from-bytes-to-kb-mb-g
 
+data(batrips)
+
 kable(head(batrips))
 # print(head(batrips))
-glimpse(batrips)
+
+# In data.table-Objekt umwandeln
+
+batrips_dt <- as.data.table(batrips)
+str(batrips_dt)
+
+# In tibble umwandeln für dplyr
+batrips_dpl <- as_tibble(batrips)
+class(batrips_dpl)
+
 ```
 
 # Variablen berechnen / umformen
 
 data.table wirbt mit "Update by Reference". Seit R Version 3.1.0 wird beim Berechnen neuer Variablen keine *deep copy* des gesamten Datensatzes mehr erstellt. Es wird jedoch weiterhin die jeweilige Spalte vollständig kopiert. *data.table* umgeht diesen speicher-ineffizienten Vorgang.
 
-
+## Base R, dplyr und data.table
 
 ```{r Variablen_berechnen, error = TRUE}
 
-bench::mark(
-  batrips$duration_minutes <- batrips$duration / 60,
-  batrips <- mutate(batrips, duration_minutes = duration / 60),
-  batrips[, duration_minutes := duration / 60]
+# Simple Zuweisung funktioniert nicht: Unterschiedliche Ergebnisse, bench::mark() beschwert sich.
+# Außerdem verwenden die Pakete unterschiedliche Objektklassen.
+# Lösung: bench::mark(..., check = FALSE)
+
+timing <- bench::mark(
+  BaseR = batrips$duration_minutes <- batrips$duration / 60,
+  dplyr = batrips_dpl <- mutate(batrips_dpl, duration_minutes = duration / 60),
+  data.table = batrips_dt[, duration_minutes := duration / 60],
+  check = FALSE
 )
+
+timing
+autoplot(timing)
+
+bench::mark(
+  BaseR = batrips$duration_minutes <- batrips$duration / 60,
+  dplyr = batrips_dpl <- mutate(batrips_dpl, duration_minutes = duration / 60),
+  data.table = batrips_dt[, duration_minutes := duration / 60],
+  check = FALSE,
+  relative = TRUE
+)
+
+
+
+```
+
+
+## dtplyr vs. data.table
+
+Wie sieht es mit dtplyr aus?
+
+Vorgehen: Datensatz in "lazy data.table" umwandeln. Dieser erfasst den Zweck von dplyr-Verben und übersetzt sie in data.table-Funktionen, die erst bei Bedarf (*lazy*) ausgeführt werden.
+
+```{r dtplyr_setup}
+
+batrips_dtpl <- lazy_dt(batrips)
+class(batrips_dtpl)
+obj_size(batrips_dtpl)
+obj_size(batrips)
+batrips_dtpl$vars
+attributes(batrips_dtpl)
+
+```
+
+```{r}
+
+# varberech_dtplyr <- function() {
+#   batrips_dtpl <- mutate(batrips_dtpl, duration_minutes = duration / 60)
+#   as.data.table(batrips_dtpl)
+# }
+# 
+# varberech_datatable <- function() {
+#   batrips[, duration_minutes := duration / 60]
+#   as.data.table(batrips)
+# }
+
+timing <- bench::mark(
+  dtplyr = batrips_dtpl <- mutate(batrips_dtpl, duration_minutes = duration / 60),
+  data.table = batrips_dt[, duration_minutes := duration / 60],
+  check = FALSE,
+  relative = TRUE
+)
+
+timing
+autoplot(timing)
 
 ```
 
