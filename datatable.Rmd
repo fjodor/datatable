@@ -1,0 +1,63 @@
+---
+title: "data.table kennen lernen"
+author: "WR"
+date: "Bearbeitungsstand: `r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    collapsed: false
+    code_folding: show
+---
+  
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(knitr)
+library(tidyverse)
+library(bikeshare14)
+library(bench)
+library(lobstr)
+
+```
+
+# Verwendete Pakete
+
+* bench für Zeitmessungen: empfehlenswert gegenüber microbenchmark, u. a. weil es automatisch Ergebnisse vergleicht
+* bikeshare14 für den Datensatz: batrips
+
+# Testdatensatz: batrips - Fahrradwege
+
+Der Datensatz **batrips** enthält anonymisierte Fahrradwege aus der Bay Area von San Francisco im Jahr 2014.
+
+Es handelt sich um `r nrow(batrips)` Zeilen und `r ncol(batrips)` Spalten (Variablen). Der Datensatz belegt `r utils:::format.object_size(obj_size(batrips), "auto")` Arbeitsspeicher.
+
+```{r}
+
+# Der Trick mit utils:::format.object_size() ist ein Hack (Funktion ist NICHT exportiert) und stammt von hier:
+# https://stackoverflow.com/questions/29787452/how-do-i-quickly-convert-the-size-element-of-file-info-from-bytes-to-kb-mb-g
+
+kable(head(batrips))
+# print(head(batrips))
+glimpse(batrips)
+```
+
+# Variablen berechnen / umformen
+
+data.table wirbt mit "Update by Reference". Seit R Version 3.1.0 wird beim Berechnen neuer Variablen keine *deep copy* des gesamten Datensatzes mehr erstellt. Es wird jedoch weiterhin die jeweilige Spalte vollständig kopiert. *data.table* umgeht diesen speicher-ineffizienten Vorgang.
+
+
+
+```{r Variablen_berechnen, error = TRUE}
+
+bench::mark(
+  batrips$duration_minutes <- batrips$duration / 60,
+  batrips <- mutate(batrips, duration_minutes = duration / 60),
+  batrips[, duration_minutes := duration / 60]
+)
+
+```
+
